@@ -1,0 +1,10 @@
+{
+  "pipes": [
+    {"name": "cold supply", "points": [[40, 0], [40, 80], [120, 80]], "start_m": 0.0},
+    {"name": "hot supply",  "points": [[0, 110], [200, 110]], "start_m": 0.0}
+  ],
+  "assets": [
+    {"name": "socket 1", "x": 150, "y": 100, "type": "socket"},
+    {"name": "ceiling edge", "x": 100, "y": 0, "type": "ceiling", "electrical": false}
+  ]
+}

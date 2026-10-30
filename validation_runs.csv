@@ -1,0 +1,145 @@
+kind,seed,alert_frames,delay,loc_err,iou,cls_ok,escalated,false_alarm,hours,config
+leak,40,12,0.5031430751618622,1.6483351156047898,0.9908590842905679,True,True,False,6.0,full (ML pixel + ML events)
+leak,41,11,0.7652112668812026,1.890263221863377,0.970440881763527,True,True,False,6.0,full (ML pixel + ML events)
+splash,40,5,0.5031430751618622,0.6210933154532123,,True,False,False,6.0,full (ML pixel + ML events)
+splash,41,6,0.4318779335478691,3.435152167268586,,True,False,False,6.0,full (ML pixel + ML events)
+shadow,40,0,,,,,False,False,6.0,full (ML pixel + ML events)
+shadow,41,0,,,,,False,False,6.0,full (ML pixel + ML events)
+light_switch,40,0,,,,,False,False,6.0,full (ML pixel + ML events)
+light_switch,41,0,,,,,False,False,6.0,full (ML pixel + ML events)
+person,40,0,,,,,False,False,6.0,full (ML pixel + ML events)
+person,41,0,,,,,False,False,6.0,full (ML pixel + ML events)
+camera_nudge,40,0,,,,,False,False,6.0,full (ML pixel + ML events)
+camera_nudge,41,0,,,,,False,False,6.0,full (ML pixel + ML events)
+dry_drift,40,0,,,,,False,False,6.0,full (ML pixel + ML events)
+dry_drift,41,0,,,,,False,False,6.0,full (ML pixel + ML events)
+condensation,40,0,,,,,False,False,6.0,full (ML pixel + ML events)
+condensation,41,0,,,,,False,False,6.0,full (ML pixel + ML events)
+leak,40,11,0.8364764084951957,0.7741351865798897,0.7436231765952245,True,True,False,6.0,"full (weighted fusion, rule events)"
+leak,41,11,0.7652112668812026,0.3973866974227146,0.732266391326794,True,True,False,6.0,"full (weighted fusion, rule events)"
+splash,40,2,0.5031430751618622,2.939966378204955,,True,False,False,6.0,"full (weighted fusion, rule events)"
+splash,41,0,,,,,False,False,6.0,"full (weighted fusion, rule events)"
+shadow,40,0,,,,,False,False,6.0,"full (weighted fusion, rule events)"
+shadow,41,0,,,,,False,False,6.0,"full (weighted fusion, rule events)"
+light_switch,40,0,,,,,False,False,6.0,"full (weighted fusion, rule events)"
+light_switch,41,0,,,,,False,False,6.0,"full (weighted fusion, rule events)"
+person,40,0,,,,,False,False,6.0,"full (weighted fusion, rule events)"
+person,41,0,,,,,False,False,6.0,"full (weighted fusion, rule events)"
+camera_nudge,40,0,,,,,False,False,6.0,"full (weighted fusion, rule events)"
+camera_nudge,41,0,,,,,False,False,6.0,"full (weighted fusion, rule events)"
+dry_drift,40,0,,,,,False,False,6.0,"full (weighted fusion, rule events)"
+dry_drift,41,0,,,,,False,False,6.0,"full (weighted fusion, rule events)"
+condensation,40,3,,,,,True,True,6.0,"full (weighted fusion, rule events)"
+condensation,41,0,,,,,False,False,6.0,"full (weighted fusion, rule events)"
+leak,40,12,0.5031430751618622,1.6051594067273653,0.9836433611289288,True,True,False,6.0,- illumination library
+leak,41,11,0.7652112668812026,1.890263221863377,0.970440881763527,True,True,False,6.0,- illumination library
+splash,40,5,0.5031430751618622,0.6210933154532123,,True,False,False,6.0,- illumination library
+splash,41,6,0.4318779335478691,3.435152167268586,,True,False,False,6.0,- illumination library
+shadow,40,0,,,,,False,False,6.0,- illumination library
+shadow,41,0,,,,,False,False,6.0,- illumination library
+light_switch,40,0,,,,,False,False,6.0,- illumination library
+light_switch,41,0,,,,,False,False,6.0,- illumination library
+person,40,0,,,,,False,False,6.0,- illumination library
+person,41,0,,,,,False,False,6.0,- illumination library
+camera_nudge,40,0,,,,,False,False,6.0,- illumination library
+camera_nudge,41,0,,,,,False,False,6.0,- illumination library
+dry_drift,40,0,,,,,False,False,6.0,- illumination library
+dry_drift,41,0,,,,,False,False,6.0,- illumination library
+condensation,40,0,,,,,False,False,6.0,- illumination library
+condensation,41,0,,,,,False,False,6.0,- illumination library
+leak,40,12,0.5031430751618622,2.465917353981813,0.8603972436157276,True,True,False,6.0,- illumination field normalisation
+leak,41,11,0.7652112668812026,1.8900783118300442,0.9702464435984772,True,True,False,6.0,- illumination field normalisation
+splash,40,5,0.5031430751618622,0.625799374122687,,True,False,False,6.0,- illumination field normalisation
+splash,41,6,0.4318779335478691,3.253296594122804,,True,False,False,6.0,- illumination field normalisation
+shadow,40,0,,,,,False,False,6.0,- illumination field normalisation
+shadow,41,0,,,,,False,False,6.0,- illumination field normalisation
+light_switch,40,0,,,,,False,False,6.0,- illumination field normalisation
+light_switch,41,0,,,,,False,False,6.0,- illumination field normalisation
+person,40,0,,,,,False,False,6.0,- illumination field normalisation
+person,41,0,,,,,False,False,6.0,- illumination field normalisation
+camera_nudge,40,0,,,,,False,False,6.0,- illumination field normalisation
+camera_nudge,41,0,,,,,False,False,6.0,- illumination field normalisation
+dry_drift,40,0,,,,,False,False,6.0,- illumination field normalisation
+dry_drift,41,0,,,,,False,False,6.0,- illumination field normalisation
+condensation,40,0,,,,,False,False,6.0,- illumination field normalisation
+condensation,41,1,,,,,False,True,6.0,- illumination field normalisation
+leak,40,11,0.8364764084951957,1.6592528925660985,0.8366881264770597,True,True,False,6.0,- multi-cue fusion (darkening only)
+leak,41,11,0.7652112668812026,1.6421338660827767,0.8320082601961797,True,True,False,6.0,- multi-cue fusion (darkening only)
+splash,40,2,0.5031430751618622,3.394613329865571,,True,False,False,6.0,- multi-cue fusion (darkening only)
+splash,41,2,0.4318779335478691,2.5599594016618616,,True,False,False,6.0,- multi-cue fusion (darkening only)
+shadow,40,0,,,,,False,False,6.0,- multi-cue fusion (darkening only)
+shadow,41,0,,,,,False,False,6.0,- multi-cue fusion (darkening only)
+light_switch,40,0,,,,,False,False,6.0,- multi-cue fusion (darkening only)
+light_switch,41,0,,,,,False,False,6.0,- multi-cue fusion (darkening only)
+person,40,0,,,,,False,False,6.0,- multi-cue fusion (darkening only)
+person,41,0,,,,,False,False,6.0,- multi-cue fusion (darkening only)
+camera_nudge,40,0,,,,,False,False,6.0,- multi-cue fusion (darkening only)
+camera_nudge,41,0,,,,,False,False,6.0,- multi-cue fusion (darkening only)
+dry_drift,40,0,,,,,False,False,6.0,- multi-cue fusion (darkening only)
+dry_drift,41,0,,,,,False,False,6.0,- multi-cue fusion (darkening only)
+condensation,40,0,,,,,False,False,6.0,- multi-cue fusion (darkening only)
+condensation,41,0,,,,,False,False,6.0,- multi-cue fusion (darkening only)
+leak,40,13,0.16980974182852915,2.169991238393679,0.9908590842905679,False,True,False,6.0,"- temporal logic (persist=1, no tracking memory)"
+leak,41,12,0.4318779335478691,2.169253844701099,0.970440881763527,False,True,False,6.0,"- temporal logic (persist=1, no tracking memory)"
+splash,40,5,0.16980974182852915,,,,False,False,6.0,"- temporal logic (persist=1, no tracking memory)"
+splash,41,6,0.09854460021453604,,,,False,False,6.0,"- temporal logic (persist=1, no tracking memory)"
+shadow,40,0,,,,,False,False,6.0,"- temporal logic (persist=1, no tracking memory)"
+shadow,41,0,,,,,False,False,6.0,"- temporal logic (persist=1, no tracking memory)"
+light_switch,40,0,,,,,False,False,6.0,"- temporal logic (persist=1, no tracking memory)"
+light_switch,41,0,,,,,False,False,6.0,"- temporal logic (persist=1, no tracking memory)"
+person,40,0,,,,,False,False,6.0,"- temporal logic (persist=1, no tracking memory)"
+person,41,0,,,,,False,False,6.0,"- temporal logic (persist=1, no tracking memory)"
+camera_nudge,40,0,,,,,False,False,6.0,"- temporal logic (persist=1, no tracking memory)"
+camera_nudge,41,0,,,,,False,False,6.0,"- temporal logic (persist=1, no tracking memory)"
+dry_drift,40,0,,,,,False,False,6.0,"- temporal logic (persist=1, no tracking memory)"
+dry_drift,41,0,,,,,False,False,6.0,"- temporal logic (persist=1, no tracking memory)"
+condensation,40,13,,,,,False,True,6.0,"- temporal logic (persist=1, no tracking memory)"
+condensation,41,15,,,,,False,True,6.0,"- temporal logic (persist=1, no tracking memory)"
+leak,40,12,0.5031430751618622,1.6483351156047898,0.9908590842905679,True,True,False,6.0,- occlusion handling
+leak,41,11,0.7652112668812026,1.890263221863377,0.970440881763527,True,True,False,6.0,- occlusion handling
+splash,40,5,0.5031430751618622,0.6210933154532123,,True,False,False,6.0,- occlusion handling
+splash,41,6,0.4318779335478691,3.435152167268586,,True,False,False,6.0,- occlusion handling
+shadow,40,0,,,,,False,False,6.0,- occlusion handling
+shadow,41,0,,,,,False,False,6.0,- occlusion handling
+light_switch,40,0,,,,,False,False,6.0,- occlusion handling
+light_switch,41,0,,,,,False,False,6.0,- occlusion handling
+person,40,0,,,,,False,False,6.0,- occlusion handling
+person,41,0,,,,,False,False,6.0,- occlusion handling
+camera_nudge,40,0,,,,,False,False,6.0,- occlusion handling
+camera_nudge,41,0,,,,,False,False,6.0,- occlusion handling
+dry_drift,40,0,,,,,False,False,6.0,- occlusion handling
+dry_drift,41,0,,,,,False,False,6.0,- occlusion handling
+condensation,40,0,,,,,False,False,6.0,- occlusion handling
+condensation,41,0,,,,,False,False,6.0,- occlusion handling
+leak,40,12,0.5031430751618622,1.6483351156047898,0.9908590842905679,True,True,False,6.0,- camera self-recalibration
+leak,41,11,0.7652112668812026,1.890263221863377,0.970440881763527,True,True,False,6.0,- camera self-recalibration
+splash,40,5,0.5031430751618622,0.6210933154532123,,True,False,False,6.0,- camera self-recalibration
+splash,41,6,0.4318779335478691,3.435152167268586,,True,False,False,6.0,- camera self-recalibration
+shadow,40,0,,,,,False,False,6.0,- camera self-recalibration
+shadow,41,0,,,,,False,False,6.0,- camera self-recalibration
+light_switch,40,0,,,,,False,False,6.0,- camera self-recalibration
+light_switch,41,0,,,,,False,False,6.0,- camera self-recalibration
+person,40,0,,,,,False,False,6.0,- camera self-recalibration
+person,41,0,,,,,False,False,6.0,- camera self-recalibration
+camera_nudge,40,0,,,,,False,False,6.0,- camera self-recalibration
+camera_nudge,41,2,,,,,False,True,6.0,- camera self-recalibration
+dry_drift,40,0,,,,,False,False,6.0,- camera self-recalibration
+dry_drift,41,0,,,,,False,False,6.0,- camera self-recalibration
+condensation,40,0,,,,,False,False,6.0,- camera self-recalibration
+condensation,41,0,,,,,False,False,6.0,- camera self-recalibration
+leak,40,12,0.5031430751618622,1.6483351156047898,0.9908590842905679,True,True,False,6.0,- event classifier (no cross-wall/drying logic)
+leak,41,11,0.7652112668812026,1.890263221863377,0.970440881763527,True,True,False,6.0,- event classifier (no cross-wall/drying logic)
+splash,40,5,0.5031430751618622,0.6210933154532123,,True,False,False,6.0,- event classifier (no cross-wall/drying logic)
+splash,41,6,0.4318779335478691,3.435152167268586,,True,False,False,6.0,- event classifier (no cross-wall/drying logic)
+shadow,40,0,,,,,False,False,6.0,- event classifier (no cross-wall/drying logic)
+shadow,41,0,,,,,False,False,6.0,- event classifier (no cross-wall/drying logic)
+light_switch,40,0,,,,,False,False,6.0,- event classifier (no cross-wall/drying logic)
+light_switch,41,0,,,,,False,False,6.0,- event classifier (no cross-wall/drying logic)
+person,40,0,,,,,False,False,6.0,- event classifier (no cross-wall/drying logic)
+person,41,0,,,,,False,False,6.0,- event classifier (no cross-wall/drying logic)
+camera_nudge,40,0,,,,,False,False,6.0,- event classifier (no cross-wall/drying logic)
+camera_nudge,41,0,,,,,False,False,6.0,- event classifier (no cross-wall/drying logic)
+dry_drift,40,0,,,,,False,False,6.0,- event classifier (no cross-wall/drying logic)
+dry_drift,41,0,,,,,False,False,6.0,- event classifier (no cross-wall/drying logic)
+condensation,40,11,,,,,True,True,6.0,- event classifier (no cross-wall/drying logic)
+condensation,41,11,,,,,True,True,6.0,- event classifier (no cross-wall/drying logic)

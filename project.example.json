@@ -1,0 +1,9 @@
+{
+  "interval_s": 10,
+  "port": 8000,
+  "config": {"fusion": "ml", "privacy": true},
+  "walls": [
+    {"name": "wall1", "source": "http://192.168.1.5:8080/video", "calib": "calib.json",
+     "baselines": ["baseline_day.png", "baseline_evening.png"], "layout": "layout_wall1.json"}
+  ]
+}
