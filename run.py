@@ -67,10 +67,30 @@ fleet = Fleet(mons)
 dash = Dashboard(fleet, cfgj.get("port", a.port), os.path.join(a.out, "feedback.csv")); dash.start()
 log = open(os.path.join(a.out, "events.jsonl"), "a")
 t_start = time.time()
+cams = {w["name"]: w["source"] for w in cfgj["walls"]}
+fails = {n: 0 for n in srcs}
+
 while True:
-    t0 = time.time(); t = (t0 - t_start) / 3600.0
-    frames = {n: s.read() for n, s in srcs.items()}
-    frames = {n: f for n, f in frames.items() if f is not None}
+    t0 = time.time()
+    t = (t0 - t_start) / 3600.0
+    frames = {}
+
+    for n, s in list(srcs.items()):
+        f = s.read()
+
+        if f is None:
+            fails[n] += 1
+            if fails[n] >= 5:
+                try:
+                    s.release()
+                    srcs[n] = Source(cams[n])
+                    fails[n] = 0
+                    print(f"{n}: camera reconnected")
+                except IOError:
+                    print(f"{n}: camera still offline")
+        else:
+            fails[n] = 0
+            frames[n] = f
     for n, th in thermals.items():             # optional thermal evidence (cool anomaly)
         from evdip.thermal import load_temp, register, thermal_cue
         m = fleet.mon[n]
@@ -79,7 +99,13 @@ while True:
             m.thermal_cue = thermal_cue(tm)
         except Exception as e:
             print("thermal skipped:", e)
-    snaps = fleet.step(frames, t)
+    try:
+        snaps = fleet.step(frames, t)
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        time.sleep(interval)
+        continue
     dash.update(snaps)
     for n, s in snaps.items():
         for tr in s["tracks"]:
