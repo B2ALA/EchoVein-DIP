@@ -80,12 +80,14 @@ def make_handler(svc):
                 if act == "reference":
                     return self._send(200, svc.add_reference(sid, q.get("category", ["dry"])[0], q.get("notes", [""])[0], self._body(), q.get("force", ["0"])[0] == "1"))
                 if act == "thermal": return self._send(200, svc.set_thermal(sid, self._json()))
+                if act == "thermal_demo": return self._send(200, svc.thermal_demo(sid, self._json()))
                 if act == "layout": return self._send(200, svc.set_layout(sid, self._json()))
                 if act == "snapshot": return self._send(200, svc.snapshot(sid))
                 if act == "feedback":
                     d = self._json(); return self._send(200, svc.feedback(sid, int(d.get("track", -1)), str(d.get("verdict", ""))))
             if method == "GET":
                 if act == "results": return self._send(200, svc.results(sid))
+                if act == "thermal": return self._send(200, svc.thermal_state(sid))
                 if act == "report":
                     return self._send(200, svc.report_html(sid).encode(), "text/html; charset=utf-8")
             raise ApiError(404, "not found")

@@ -12,7 +12,7 @@ button,select,input,textarea{font:inherit;color:var(--tx);background:var(--card)
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0}.mu{color:var(--mu)}.warn{color:var(--w)}.err{color:var(--e)}
 #wrap{position:relative;background:#000;border-radius:8px;overflow:hidden;min-height:180px}#v{width:100%;display:block}#ov{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
 .steps{display:flex;gap:6px;flex-wrap:wrap}.step{padding:3px 9px;border-radius:99px;border:1px solid var(--bd);font-size:12px}.step.done{background:var(--ok);color:#fff;border-color:var(--ok)}
-.banner{padding:10px;border-radius:8px;color:#fff;font-weight:600;margin-bottom:8px}.b-none{background:var(--ok)}.b-change{background:var(--w)}.b-potential{background:var(--s)}.b-inspect{background:var(--e)}.b-quality{background:#6e7781}
+.banner{padding:10px;border-radius:8px;color:#fff;font-weight:600;margin-bottom:8px}.b-none{background:var(--ok)}.b-change{background:var(--w)}.b-potential{background:var(--s)}.b-inspect{background:var(--e)}.b-quality{background:#6e7781}.b-thermal{background:#7c3aed}
 table{width:100%;border-collapse:collapse}td,th{padding:3px 5px;border-bottom:1px solid var(--bd);text-align:left;font-size:12.5px}img.pv{width:100%;border-radius:6px;margin-top:4px}
 .bar{height:8px;background:var(--bd);border-radius:4px;overflow:hidden}.bar>i{display:block;height:100%;background:var(--ac)}details{margin:6px 0}summary{cursor:pointer}
 </style></head><body>
@@ -43,6 +43,11 @@ table{width:100%;border-collapse:collapse}td,th{padding:3px 5px;border-bottom:1p
 </div><div>
  <div class="card"><h2>Scan</h2><div class="row"><button id="bScan" class="p" disabled>Start scanning</button><button id="bSnap" disabled>Save snapshot</button><button id="bRep" disabled>Open report</button><span id="perf" class="mu"></span></div>
   <div id="banner" class="banner b-quality">Not scanning</div><div id="res"></div></div>
+ <div class="card" id="thCard"><h2>Thermal analysis (live)</h2>
+  <div class="row"><button id="bThDemo">Load simulated thermal frame</button><label class="mu">Δ threshold <input id="thDelta" type="number" value="1.2" step="0.1" style="width:64px"> °C</label><label class="mu">min area <input id="thMin" type="number" value="30" style="width:64px"> cm²</label></div>
+  <div class="row"><label class="mu">Live feed URL <input id="thUrl" placeholder="http://192.168.1.50/thermal" size="24"></label><label class="mu"><input type="checkbox" id="thLive"> live</label><label class="mu"><input type="checkbox" id="thFlipH"> flip H</label><label class="mu"><input type="checkbox" id="thFlipV"> flip V</label><label class="mu"><input type="checkbox" id="thOverlay" checked> overlay on camera</label></div>
+  <div id="thInfo" class="mu">No thermal data yet. Calibrate, then upload a °C map (Thermal data section), load the simulated frame, or connect a live feed (JSON {"temps":[[...]]} or CSV).</div>
+  <img id="thImg" class="pv" alt="thermal heat-map" style="display:none"><div id="thTab"></div></div>
  <div class="card"><h2>Processing</h2><div class="mu">Original frame = live preview. Reference · now · evidence score · result:</div><img id="im1" class="pv" alt=""><div class="row"><div style="flex:1"><div class="mu">Processed wall map</div><img id="im2" class="pv" alt=""></div><div style="flex:1"><div class="mu">Evidence heat-map</div><img id="im3" class="pv" alt=""></div></div></div>
  <div class="card"><h2>History</h2><div id="hist" class="mu">-</div></div>
 </div></main>
@@ -134,7 +139,7 @@ function render(r){$('banner').className='banner b-'+r.category;$('banner').text
    if(g.recurring_previous_sessions)h+=`<tr><td colspan=9 class="warn">Recurring: seen here in ${g.recurring_previous_sessions} earlier session(s)</td></tr>`;
    if(g.source_zone)h+=`<tr><td colspan=9 class="mu">probable source zone ≈ (${g.source_zone.x_cm.toFixed(0)}, ${g.source_zone.y_cm.toFixed(0)}) ± ${g.source_zone.sx_cm.toFixed(0)} cm - an estimate, not a confirmed break point</td></tr>`;
    if(g.forecast)h+=`<tr><td colspan=9 class="mu">if trend continues: ${g.forecast.points.map(p=>`+${(p.horizon_h*60).toFixed(0)}min ≈ ${p.area_cm2.toFixed(0)} ${U}²`).join(', ')}</td></tr>`;
-   if(g.thermal)h+=`<tr><td colspan=9 class="mu">thermal ${g.thermal.mean.toFixed(1)} ${g.thermal.units} (Δ ${g.thermal.delta_vs_wall_median.toFixed(1)} vs wall)</td></tr>`});h+='</table><div class="mu">Distances in '+U+' from the wall/area edges (L/R/T/B). Surface change ≠ confirmed leak source.</div>'}
+   if(g.thermal)h+=`<tr><td colspan=9 class="mu">thermal ${g.thermal.mean.toFixed(1)} ${g.thermal.units} (Δ ${g.thermal.delta_vs_wall_median.toFixed(1)} vs wall)${g.thermal.cold_anomaly?' · <b class="warn">overlaps a cold thermal anomaly</b>':''}</td></tr>`});h+='</table><div class="mu">Distances in '+U+' from the wall/area edges (L/R/T/B). Surface change ≠ confirmed leak source.</div>'}
  if(r.warnings.length)h+='<ul class="warn">'+r.warnings.map(w=>'<li>'+esc(w)+'</li>').join('')+'</ul>';
  h+=`<div class="mu">Wall health score ${r.wall_health.score.toFixed(0)}/100 (heuristic: ${r.wall_health.breakdown.map(b=>esc(b.factor)+' -'+b.penalty).join(', ')})</div>`;
  const fps=S.times.length>1?((S.times.length-1)/((S.times[S.times.length-1]-S.times[0])/1000)):0;$('perf').textContent=`latency ${r.perf.latency_ms.toFixed(0)} ms (server) / ${(S.lat.reduce((a,b)=>a+b,0)/S.lat.length).toFixed(0)} ms (round trip) · ${fps.toFixed(1)} analyses/s measured`;
@@ -147,4 +152,41 @@ async function refreshSession(){try{if(S.sid){const d=await api(`/api/sessions/$
  const h=await api('/api/sessions');$('hist').innerHTML=h.sessions.slice(0,8).map(s=>`<div class="row"><span>${esc(s.wall_id)} · ${new Date(s.created*1000).toLocaleString()} · ${esc(s.camera_type)}</span><button onclick="del('${s.id}')">Delete</button></div>`).join('')||'-'}catch(e){}}
 window.del=async id=>{if(!confirm('Delete this scan session and all its images?'))return;await api('/api/sessions/'+id,{method:'DELETE'});if(id===S.sid){S.sid=null;S.cal=false;S.hasScale=false;S.hasRef=false;S.n=0;S.regs=[];draw()}refreshSession();steps()};
 refreshSession();steps();
+
+// ================= thermal upgrade: heat-map, hot/cold anomalies, outlines, area, path length (live) =================
+S.th=null;S.thRev=0;S.U='cm';
+const COLT={cold:'#22d3ee',hot:'#ff7a45'};
+function thOpts(){return{delta_c:+$('thDelta').value||1.2,min_area_cm2:+$('thMin').value||30,flip_h:$('thFlipH').checked,flip_v:$('thFlipV').checked}}
+function parseTemps(t){let a;try{a=JSON.parse(t)}catch(e){a=t.trim().split(/\r?\n/).map(l=>l.split(/[,;\s]+/).filter(Boolean).map(Number))}return a.temps||a}
+function thErr(e){$('thInfo').innerHTML='<span class="err">'+esc(e.message)+'</span>'}
+function thShow(r){const t=r.thermal;if(!t)return;S.th=t;S.thRev=t.rev;if(r.heatmap){$('thImg').src=r.heatmap;$('thImg').style.display='block'}thTable(t);draw()}
+async function thSend(temps,device){if(!S.sid||!S.cal)throw new Error('calibrate the wall first (thermal is registered to the calibrated wall)');
+ const r=await jpost(`/api/sessions/${S.sid}/thermal`,Object.assign({temps,units:'C',device},thOpts()));thShow(r);return r}
+function thTable(t){const U=S.U||'cm',st=t.stats;
+ let h=`<div class="mu">${esc(t.device||'thermal')} · ${st.min.toFixed(1)}–${st.max.toFixed(1)} °C · threshold ±${st.threshold_c.toFixed(1)} °C (noise ${st.noise_c.toFixed(2)}) · cold ${t.n_cold} / hot ${t.n_hot} · cold path ${t.total_path_cm.toFixed(0)} ${U}</div><div class="mu">${esc(t.registration)} · data age ${t.age_s.toFixed(0)} s</div>`;
+ if(t.stale)h+='<div class="warn">Thermal data is stale - upload or stream a fresh frame.</div>';
+ if(t.regions.length){h+=`<table><tr><th>#</th><th>type</th><th>Δ°C</th><th>peak °C</th><th>area ${U}²</th><th>path ${U}</th><th>L/T ${U}</th><th>conf</th></tr>`+
+  t.regions.map(r=>`<tr style="color:${r.kind==='cold'?'#0891b2':'#ea580c'}"><td>${esc(r.id)}</td><td>${r.kind}<div class="mu">${esc(r.level)}</div></td><td>${r.delta_c.toFixed(1)}</td><td>${r.peak_c.toFixed(1)}</td><td>${r.area_cm2.toFixed(0)}</td><td>${r.path_length_cm.toFixed(0)}</td><td>${r.left_cm.toFixed(0)}/${r.top_cm.toFixed(0)}</td><td>${r.confidence.toFixed(2)}</td></tr>`).join('')+
+  '</table><div class="mu">Cold = possible moisture/evaporation; hot = heat source. Anomaly ≠ confirmed leak: verify on site. Path = skeleton length of the region.</div>'}
+ else h+='<div class="mu">No thermal anomalies above the threshold.</div>';
+ $('thInfo').innerHTML=h}
+// wall-map (0..1) -> camera pixels via the 4 calibrated corners (projective square->quad mapping)
+function sq2quad(q){const[p0,p1,p2,p3]=q,dx1=p1[0]-p2[0],dx2=p3[0]-p2[0],dx3=p0[0]-p1[0]+p2[0]-p3[0],dy1=p1[1]-p2[1],dy2=p3[1]-p2[1],dy3=p0[1]-p1[1]+p2[1]-p3[1];let g=0,h=0;
+ if(Math.abs(dx3)>1e-9||Math.abs(dy3)>1e-9){const den=dx1*dy2-dx2*dy1;g=(dx3*dy2-dx2*dy3)/den;h=(dx1*dy3-dx3*dy1)/den}
+ const a=p1[0]-p0[0]+g*p1[0],b=p3[0]-p0[0]+h*p3[0],c=p0[0],d=p1[1]-p0[1]+g*p1[1],e=p3[1]-p0[1]+h*p3[1],f=p0[1];
+ return(u,v)=>{const w=g*u+h*v+1;return[(a*u+b*v+c)/w,(d*u+e*v+f)/w]}}
+function drawThermal(){if(!S.stream||!S.cal||!S.th||!$('thOverlay').checked)return;const W=ov.width,H=ov.height,map=sq2quad(S.corners.map(p=>[p[0]*W,p[1]*H]));
+ S.th.regions.forEach(r=>{const col=COLT[r.kind]||'#fff';cx.save();cx.strokeStyle=col;cx.fillStyle=col;cx.lineWidth=Math.max(2,W/300);cx.setLineDash(r.kind==='hot'?[6,4]:[]);
+  (r.polygons||[]).forEach(poly=>{cx.beginPath();poly.forEach((p,i)=>{const q=map(p[0],p[1]);i?cx.lineTo(q[0],q[1]):cx.moveTo(q[0],q[1])});cx.closePath();cx.globalAlpha=.18;cx.fill();cx.globalAlpha=1;cx.stroke()});
+  if(r.centroid_norm){const q=map(r.centroid_norm[0],r.centroid_norm[1]);cx.setLineDash([]);cx.font=Math.max(12,W/45)+'px sans-serif';cx.fillText(`${r.id} ${r.delta_c>0?'+':''}${r.delta_c.toFixed(1)}°C`,q[0]+4,q[1])}
+  cx.restore()})}
+const _draw=draw;draw=function(){_draw();drawThermal()};
+// every live frame result carries the thermal summary; re-fetch the heat-map image only when a new thermal frame arrived
+const _render=render;render=function(r){_render(r);S.U=r.units==='relative'?'%':'cm';const t=r.thermal;
+ if(t&&t.present){S.th=t;if(t.rev!==S.thRev){S.thRev=t.rev;api(`/api/sessions/${S.sid}/thermal`).then(x=>{if(x.heatmap){$('thImg').src=x.heatmap;$('thImg').style.display='block'}}).catch(()=>{})}thTable(t)}else S.th=null};
+$('bThDemo').onclick=async()=>{try{if(!S.stream)throw new Error('start the camera first');await ensureSession();if(!S.cal)throw new Error('calibrate the wall first');thShow(await jpost(`/api/sessions/${S.sid}/thermal_demo`,thOpts()))}catch(e){thErr(e)}};
+$('bTh').onclick=async()=>{try{const f=$('thf').files[0];if(!f)throw new Error('choose a file');await thSend(parseTemps(await f.text()),$('thdev').value||f.name);$('thOut').innerHTML='<span class="mu">analysed - see "Thermal analysis (live)"</span>'}catch(e){$('thOut').innerHTML='<span class="err">'+esc(e.message)+'</span>';thErr(e)}};
+let thTimer=null;
+async function thPoll(){if(!$('thLive').checked)return;try{const u=$('thUrl').value.trim();if(!u)throw new Error('enter the live feed URL');const r=await fetch(u,{cache:'no-store'});if(!r.ok)throw new Error('feed HTTP '+r.status);await thSend(parseTemps(await r.text()),'live: '+u)}catch(e){thErr(e)}thTimer=setTimeout(thPoll,1000)}
+$('thLive').onchange=()=>{clearTimeout(thTimer);if($('thLive').checked)thPoll()};
 </script></body></html>

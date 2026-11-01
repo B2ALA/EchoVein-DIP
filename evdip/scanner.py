@@ -15,7 +15,7 @@ from .crosswall import descriptor, compare
 from .backtrace import forecast_growth, load_layout
 from .store import Store, WALL_RE
 from .common import order_corners
-from .thermal import register, thermal_cue
+from .thermal import register, thermal_cue, analyze_thermal, render_heatmap, demo_thermal
 from .autoscale import detect_markers, measure_quad, estimate_aspect
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,7 +23,8 @@ ALIGNED = ("dry", "earlier")                       # pixel-aligned same-wall ref
 CATEGORIES = ("dry", "earlier", "known_damp", "known_leak_surface", "other_wall", "thermal")
 CATEGORY_TEXT = {"none": "No significant visual change detected", "change": "Visual change detected",
                  "potential": "Potential moisture-related pattern detected", "inspect": "Additional inspection recommended",
-                 "quality": "Insufficient image quality for assessment"}
+                 "quality": "Insufficient image quality for assessment",
+                 "thermal": "Thermal anomaly detected - verify on site"}
 LIMITS = ["Detects surface appearance changes only; hidden leaks that have not reached the surface are not seen.",
           "Reported positions are of the changed/damp surface region, NOT a confirmed leak source or pipe-break point.",
           "Colour/darkness/thermal changes have non-leak causes (shadows, stains, paint, condensation, heating); a person must verify.",
@@ -255,7 +256,7 @@ class ScanService:
         q["level"] = "good" if q["score"] >= 0.75 else "fair" if q["score"] >= 0.5 else "poor"
         c.update(quality=q, created=time.time(), wall_w_cm=wc, wall_h_cm=hc, units=units, dims_method=method, dims_uncertainty_cm=unc)
         self.store.set_calib(sid, c)
-        rt.proc, rt.cal = (pw, ph), Calib(c); rt.monitor = None; rt.descs = {}
+        rt.proc, rt.cal = (pw, ph), Calib(c); rt.monitor = None; rt.descs = {}; rt.thermal = None   # thermal map is tied to the old wall map
         self._maybe_build(sid)
         return {"calibration": {k: c[k] for k in ("wall_w_cm", "wall_h_cm", "map_size", "px_per_m", "image_size", "quality", "units", "dims_method", "dims_uncertainty_cm")},
                 "monitoring": rt.monitor is not None}
@@ -322,6 +323,8 @@ class ScanService:
         cfg = Config(fusion="ml", classifier="rules", persist=self.cfg.persist, max_state="SUSPECTED", privacy=True)
         rt.monitor = WallMonitor(sid, rt.cal, refs, layout=lay, cfg=cfg, pixel_model=self.pixel_model, event_model_path=str(ROOT / "models" / "event_clf.joblib"))
         rt.t0 = time.time(); rt.persist_count = {}
+        if rt.thermal is not None:                                   # keep thermal fusion cue after a rebuild
+            rt.monitor.thermal_cue = thermal_cue(rt.thermal["map"])
 
     # ---------------------------------------------------------------- thermal
     def set_thermal(self, sid, body):
@@ -330,24 +333,66 @@ class ScanService:
             arr = np.array(body["temps"], np.float32)
         except Exception:
             raise ApiError(400, "temps must be a 2-D array of numbers")
-        units = str(body.get("units", "C"))
+        units = str(body.get("units", "C")).upper()[:1] or "C"
+        if units == "F":                                             # accept Fahrenheit / Kelvin, analyse in degC
+            arr = (arr - 32.0) * 5.0 / 9.0; units = "C"
+        elif units == "K":
+            arr = arr - 273.15; units = "C"      # now degC
         if arr.ndim != 2 or min(arr.shape) < 4 or max(arr.shape) > 1024 or not np.isfinite(arr).all():
             raise ApiError(400, "thermal array must be finite, 2-D, between 4x4 and 1024x1024")
         if units == "C" and (arr.min() < -40 or arr.max() > 300):
             raise ApiError(400, "temperatures outside -40..300 C: check units")
         if rt.cal is None:
             raise ApiError(409, "calibrate first (thermal map is registered to the wall map)")
+        if body.get("flip_h"): arr = arr[:, ::-1]                        # sensor mounted mirrored / upside down
+        if body.get("flip_v"): arr = arr[::-1, :]
+        arr = np.ascontiguousarray(arr, dtype=np.float32)
         corners = body.get("corners")
         if corners:
             tm = register(arr, np.array(corners, np.float32), (rt.cal.W, rt.cal.Hpx))
             reg = "registered with supplied corners"
         else:
-            tm = cv2.resize(arr, (rt.cal.W, rt.cal.Hpx)); reg = "ASSUMED to cover exactly the calibrated wall (no corners supplied)"
-        rt.thermal = {"map": tm, "units": units, "device": str(body.get("device", ""))[:60], "registration": reg, "time": time.time()}
+            tm = cv2.resize(arr, (rt.cal.W, rt.cal.Hpx), interpolation=cv2.INTER_CUBIC); reg = "ASSUMED to cover exactly the calibrated wall (no corners supplied)"
+        try:
+            delta_c = float(np.clip(float(body.get("delta_c", 1.2)), 0.2, 10.0)); min_a = float(np.clip(float(body.get("min_area_cm2", 30.0)), 1.0, 5000.0))
+        except (TypeError, ValueError):
+            raise ApiError(400, "delta_c and min_area_cm2 must be numbers")
+        sigma = float(np.clip(0.45 * max(rt.cal.W / arr.shape[1], rt.cal.Hpx / arr.shape[0]), 2.0, 14.0))   # smooth more for low-res sensors
+        an = analyze_thermal(tm, rt.cal.px_per_cm, delta_c=delta_c, min_area_cm2=min_a, sigma=sigma)
+        hm = render_heatmap(tm, an, rt.cal.px_per_cm, units=(s["calib"] or {}).get("units", "cm"))
+        rt.thermal = {"map": tm, "units": units, "device": str(body.get("device", ""))[:60], "registration": reg, "time": time.time(),
+                      "analysis": an, "heatmap": _b64(hm, 85), "delta_c": delta_c, "min_area_cm2": min_a, "rev": int(time.time() * 1000)}
         np.save(self.store.sdir(sid) / "thermal_latest.npy", arr)
         if rt.monitor is not None:
             rt.monitor.thermal_cue = thermal_cue(tm)
-        return {"ok": True, "registration": reg, "min": float(arr.min()), "max": float(arr.max()), "units": units}
+        return {"ok": True, "registration": reg, "min": float(arr.min()), "max": float(arr.max()), "units": units, **self.thermal_state(sid)}
+
+    def thermal_state(self, sid):
+        # latest thermal analysis (regions, stats) + rendered heat-map data-URI
+        self._sess(sid); rt = self._rt(sid)
+        if not rt.thermal:
+            return {"present": False}
+        return {"present": True, "thermal": self._thermal_block(rt), "heatmap": rt.thermal["heatmap"]}
+
+    def thermal_demo(self, sid, body=None):
+        # loads a SIMULATED 24x32 thermal frame so the thermal pipeline/UI can be tested without a sensor
+        b = dict(body or {}); b.update(temps=demo_thermal().tolist(), units="C", device="SIMULATED demo frame (not a real sensor)")
+        return self.set_thermal(sid, b)
+
+    def _thermal_block(self, rt):
+        t = rt.thermal
+        if not t or not t.get("analysis"):
+            return None
+        an = t["analysis"]; age = time.time() - t["time"]; stale = age > 120.0; warns = []
+        if stale:
+            warns.append(f"Thermal data is {age:.0f}s old: send a fresh thermal frame for live analysis.")
+        if "ASSUMED" in t["registration"]:
+            warns.append("Thermal frame is assumed to cover exactly the calibrated wall: supply corners for accurate positions.")
+        return {"present": True, "rev": t["rev"], "device": t["device"], "registration": t["registration"], "units": t["units"], "delta_c": t["delta_c"],
+                "age_s": float(age), "stale": stale, "stats": an["stats"], "regions": an["regions"], "n_cold": an["n_cold"], "n_hot": an["n_hot"],
+                "cold_area_cm2": an["cold_area_cm2"], "hot_area_cm2": an["hot_area_cm2"], "total_path_cm": an["total_path_cm"],
+                "max_delta_c": an["max_delta_c"], "coverage_pct": an["coverage_pct"], "warnings": warns,
+                "note": "thermal anomalies are not proof of leakage (ambient, insulation, airflow, sun, heaters)"}
 
     # ------------------------------------------------------------------ frame
     def process_frame(self, sid, data, want_images=False, sim_t=None):
@@ -429,6 +474,7 @@ class ScanService:
         cal = rt.cal; ppc = cal.px_per_cm; pw, ph = rt.proc; out = []
         cq = (s["calib"] or {}).get("quality", {}); cerr = cq.get("corner_err_px", 3.0)
         tm = rt.thermal["map"] if rt.thermal else None
+        cm = rt.thermal["analysis"]["_cold_mask"] if rt.thermal else None
         for tr in m.tracker.tracks:
             if not tr.active or not tr.last()["present"] or tr.mask is None:
                 continue
@@ -470,6 +516,8 @@ class ScanService:
                 if vals.size:
                     reg["thermal"] = {"mean": float(vals.mean()), "min": float(vals.min()), "max": float(vals.max()), "units": rt.thermal["units"],
                                       "delta_vs_wall_median": float(vals.mean() - np.median(tm)),
+                                      "cold_overlap": float(cm[sel].mean()) if cm is not None else 0.0,
+                                      "cold_anomaly": bool(cm is not None and cm[sel].mean() > 0.25),
                                       "note": "thermal anomaly is not proof of leakage (ambient, insulation, airflow, sun)"}
             if tr.state in ("SUSPECTED", "ESCALATED") and (tr.id, tr.state) not in rt.logged_events:
                 rt.logged_events.add((tr.id, tr.state)); self.store.add_event(sid, s["wall_id"], cx, cy, tr.state, tr.label)
@@ -482,7 +530,7 @@ class ScanService:
             return "none"
         if not any(r["state"] in ("SUSPECTED", "ESCALATED", "VERIFIED") for r in regs):
             return "change"
-        strong = any(r["observations"] >= 10 or (r["severity_relative"] or 0) > 40 or r["recurring_previous_sessions"] > 0 or
+        strong = any(r.get("thermal", {}).get("cold_anomaly", False) or r["observations"] >= 10 or (r["severity_relative"] or 0) > 40 or r["recurring_previous_sessions"] > 0 or
                      any(a["electrical"] and a["status"] in ("reached", "approaching") for a in r["assets"]) for r in regs
                      if r["state"] in ("SUSPECTED", "ESCALATED"))
         return "inspect" if strong else "potential"
@@ -509,6 +557,15 @@ class ScanService:
                                       "ai_model": ai_on, "temperature_humidity": env.get("humidity") is not None or env.get("ambient_c") is not None}}
         area = sum(r.get("area_cm2", 0.0) for r in regs); wall_area = (res["wall"]["width_cm"] * res["wall"]["height_cm"]) if res.get("wall") else None
         pen = []
+        th = self._thermal_block(rt); res["thermal"] = th
+        if th:                                                       # thermal fusion: category, health score, indicators
+            res["warnings"] += th["warnings"]
+            res["indicators"]["thermal_anomaly"].update(n_cold=th["n_cold"], n_hot=th["n_hot"], max_delta_c=th["max_delta_c"], delta_c=th["delta_c"],
+                                                        age_s=th["age_s"], note="thermal anomalies have many non-leak causes: verify on site")
+            if wall_area:
+                pen.append(("thermal anomaly", min(15.0, 150.0 * th["cold_area_cm2"] / wall_area)))
+            if res["category"] == "none" and th["n_cold"] > 0 and not th["stale"]:
+                res["category"] = "thermal"      # thermal-only anomaly (no visual change)
         if wall_area:
             pen.append(("affected area", min(40.0, 400.0 * area / wall_area)))
         pen.append(("persistence/state", 30.0 if any(r["state"] == "ESCALATED" for r in regs) else 15.0 if any(r["state"] == "SUSPECTED" for r in regs) else 5.0 if regs else 0.0))
@@ -579,6 +636,13 @@ class ScanService:
                        f"<td>{g['width_cm']:.0f} x {g['height_cm']:.0f}</td><td>{g['area_cm2']:.0f}</td><td>&plusmn;{g['uncertainty_cm']:.1f}</td></tr>" for g in r.get("regions", []) if "x_cm" in g)
         refs = "".join(f"<tr><td>{e(x['category'])}</td><td>{time.strftime('%Y-%m-%d %H:%M', time.localtime(x['created']))}</td><td>{e(str(x['meta'].get('notes', '')))}</td></tr>" for x in self.store.list_refs(sid))
         ind = r.get("indicators", {})
+        th = r.get("thermal") or {}; thermal_html = ""
+        if th.get("present"):
+            trs = "".join(f"<tr><td>{e(str(g['id']))}</td><td>{e(g['kind'])}</td><td>{g['delta_c']:+.1f}</td><td>{g['peak_c']:.1f}</td><td>{g['area_cm2']:.0f}</td>"
+                          f"<td>{g['path_length_cm']:.0f}</td><td>{g['left_cm']:.0f} / {g['top_cm']:.0f}</td></tr>" for g in th.get("regions", []))
+            thermal_html = ("<h2>Thermal analysis</h2><p>" + e(str(th.get("device", ""))) + " &middot; threshold &plusmn;" + f"{th['stats']['threshold_c']:.1f}" + " &deg;C &middot; "
+                            + e(str(th.get("registration", ""))) + "</p><table><tr><th>ID</th><th>Type</th><th>&Delta; &deg;C</th><th>Peak &deg;C</th><th>Area</th><th>Path</th>"
+                            "<th>Left / Top</th></tr>" + (trs or "<tr><td colspan=7>none</td></tr>") + "</table>")
         return f"""<!doctype html><meta charset=utf-8><title>EchoVein report {e(sid)}</title>
 <style>body{{font:14px system-ui;max-width:900px;margin:20px auto;padding:0 12px}}table{{border-collapse:collapse;width:100%}}td,th{{border:1px solid #8886;padding:4px 6px;text-align:left}}.box{{background:#f90;color:#000;padding:8px;border-radius:6px}}</style>
 <h1>EchoVein-DIP scan report</h1><p>Wall <b>{e(s['wall_id'])}</b> · scan <b>{e(sid)}</b> · camera {e(s['camera_type'])} · snapshot {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(snap['created']))}<br>
@@ -587,7 +651,7 @@ Models: {e(json.dumps(r.get('model_versions', {})))}</p>
 <h2>Calibration</h2><p>Wall {c.get('wall_w_cm', '?')} x {c.get('wall_h_cm', '?')} cm; quality {e(str(q.get('level')))} ({q.get('score', 0):.2f}); corner uncertainty ~{q.get('corner_err_px', 0):.1f}px.<br>{e('; '.join(q.get('warnings', [])))}</p>
 <h2>Regions (cm from wall edges, surface-change locations only)</h2><table><tr><th>ID</th><th>State</th><th>Label</th><th>Left</th><th>Right</th><th>Top</th><th>Bottom</th><th>W x H</th><th>Area cm²</th><th>Unc.</th></tr>{regs or '<tr><td colspan=10>none</td></tr>'}</table>
 <h2>Images</h2>{img('frame', 'Original frame')}{img('camera', 'Detections on camera view (privacy-masked)')}{img('map', 'Rectified wall map')}{img('heat', 'Evidence heat-map')}
-<h2>References</h2><table><tr><th>Category</th><th>Captured</th><th>Notes</th></tr>{refs}</table>
+{thermal_html}<h2>References</h2><table><tr><th>Category</th><th>Captured</th><th>Notes</th></tr>{refs}</table>
 <h2>Reliability indicators (separate, not combined)</h2><pre>{e(json.dumps(ind, indent=1, default=float))}</pre>
 <h2>Warnings</h2><ul>{''.join(f'<li>{e(w)}</li>' for w in r.get('warnings', []))}</ul>
 <h2>Limitations</h2><div class=box><ul>{''.join(f'<li>{e(w)}</li>' for w in LIMITS)}</ul></div>"""
