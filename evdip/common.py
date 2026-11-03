@@ -39,9 +39,42 @@ class Source:
 
 
 def order_corners(pts):
-    pts = np.array(pts, np.float32)
-    s, d = pts.sum(1), np.diff(pts, axis=1).ravel()
-    return np.array([pts[s.argmin()], pts[d.argmin()], pts[s.argmax()], pts[d.argmax()]], np.float32)
+    """
+    Arrange four wall corners in this order:
+    Top-left, Top-right, Bottom-right, Bottom-left.
+    """
+
+    pts = np.asarray(pts, dtype=np.float32).reshape(4, 2)
+
+    if not np.isfinite(pts).all():
+        raise ValueError("Corner coordinates must be finite.")
+
+    center = np.mean(pts, axis=0)
+
+    angles = np.arctan2(
+        pts[:, 1] - center[1],
+        pts[:, 0] - center[0]
+    )
+
+    ordered = pts[np.argsort(angles)]
+
+    # Rotate the points so the top-left corner comes first.
+    start = np.argmin(ordered[:, 0] + ordered[:, 1])
+    ordered = np.roll(ordered, -start, axis=0)
+
+    # Ensure clockwise ordering in image coordinates.
+    x = ordered[:, 0]
+    y = ordered[:, 1]
+
+    signed_area = np.sum(
+        x * np.roll(y, -1) -
+        np.roll(x, -1) * y
+    )
+
+    if signed_area < 0:
+        ordered = ordered[[0, 3, 2, 1]]
+
+    return ordered.astype(np.float32)
 
 
 def build_calib(corners, wall_w_m, wall_h_m, px_per_m=200, image_size=None):
