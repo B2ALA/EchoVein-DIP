@@ -1,0 +1,150 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>EchoVein Scanner</title>
+<style>
+:root{--bg:#f4f6f8;--card:#fff;--tx:#1b2430;--mu:#5b6877;--ac:#2563eb;--ok:#2ea043;--w:#d29922;--s:#e8710a;--e:#dc2626;--bd:#d0d7de}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1419;--card:#1a212b;--tx:#e6edf3;--mu:#8b98a5;--bd:#30363d}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:14px system-ui,sans-serif;padding-bottom:env(safe-area-inset-bottom)}
+header{padding:10px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--bd)}header h1{font-size:16px;margin:0;flex:1}
+main{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:12px;padding:12px}@media(max-width:900px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:10px;margin-bottom:12px}.card h2{font-size:12px;margin:0 0 8px;color:var(--mu);text-transform:uppercase;letter-spacing:.05em}
+button,select,input,textarea{font:inherit;color:var(--tx);background:var(--card);border:1px solid var(--bd);border-radius:6px;padding:6px 9px}button{cursor:pointer}button.p{background:var(--ac);color:#fff;border-color:var(--ac)}button:disabled{opacity:.45;cursor:not-allowed}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0}.mu{color:var(--mu)}.warn{color:var(--w)}.err{color:var(--e)}
+#wrap{position:relative;background:#000;border-radius:8px;overflow:hidden;min-height:180px}#v{width:100%;display:block}#ov{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+.steps{display:flex;gap:6px;flex-wrap:wrap}.step{padding:3px 9px;border-radius:99px;border:1px solid var(--bd);font-size:12px}.step.done{background:var(--ok);color:#fff;border-color:var(--ok)}
+.banner{padding:10px;border-radius:8px;color:#fff;font-weight:600;margin-bottom:8px}.b-none{background:var(--ok)}.b-change{background:var(--w)}.b-potential{background:var(--s)}.b-inspect{background:var(--e)}.b-quality{background:#6e7781}
+table{width:100%;border-collapse:collapse}td,th{padding:3px 5px;border-bottom:1px solid var(--bd);text-align:left;font-size:12.5px}img.pv{width:100%;border-radius:6px;margin-top:4px}
+.bar{height:8px;background:var(--bd);border-radius:4px;overflow:hidden}.bar>i{display:block;height:100%;background:var(--ac)}details{margin:6px 0}summary{cursor:pointer}
+</style></head><body>
+<header><h1>EchoVein Scanner</h1><span id="status" class="mu">camera off</span>
+<span class="steps"><span class="step" id="s1">1 camera</span><span class="step" id="s2">2 calibrate</span><span class="step" id="s3">3 dry reference</span><span class="step" id="s4">4 scan</span></span></header>
+<main><div>
+ <div class="card"><h2>Camera</h2>
+  <div class="row"><select id="facing"><option value="environment">Rear camera (phone)</option><option value="user">Front / laptop webcam</option></select>
+  <select id="dev"><option value="">Any camera</option></select>
+  <select id="resSel" style="min-width:110px"><option value="640x480">640x480</option><option value="1280x720" selected>1280x720</option><option value="1920x1080">1920x1080</option></select>
+  <select id="pw" style="min-width:70px" title="processing width (px) sent to the laptop"><option>480</option><option selected>640</option><option>800</option></select></div>
+  <div class="row"><button class="p" id="bStart">Start camera</button><button id="bPause" disabled>Pause</button><button id="bStop" disabled>Stop</button><span id="camMsg" class="err"></span></div>
+  <div id="wrap"><video id="v" playsinline muted autoplay></video><canvas id="ov"></canvas></div>
+  <div class="mu" id="hint">Start the camera, frame the whole wall with the printed marker stuck on it, then press Auto-calibrate.</div></div>
+ <div class="card"><h2>Wall calibration - size is measured automatically</h2>
+  <div class="row"><input id="wid" placeholder="Wall ID (e.g. kitchen-north)" value="wall-1" size="18"><label class="mu">Marker size <input id="mk" type="number" value="15" style="width:68px"> cm</label><label class="mu"><input type="checkbox" id="selArea"> I will select the area myself</label></div>
+  <div class="row"><input id="amb" type="number" placeholder="ambient °C" style="width:100px"><input id="hum" type="number" placeholder="humidity %" style="width:100px"><input id="light" placeholder="lighting note" size="14"></div>
+  <div class="row"><button id="bAuto" class="p">Auto-calibrate (find marker + wall)</button><button id="bCal">Measure &amp; calibrate selected area</button><button id="bScale">Scale check (2 taps)</button><button id="bNew" title="new wall / new calibration">New session</button></div>
+  <div class="mu"><b>1.</b> Stick the printed EchoVein marker flat on the wall (<code>python make_marker.py</code>), fully visible. <b>2.</b> Press Auto-calibrate: the marker and wall edges are found and the wall's <b>width and height are calculated</b> for you. <b>3.</b> If the edges are not found (or you only want one part of the wall), tick "select the area myself", drag the 4 numbered corners around it and press "Measure &amp; calibrate" - that area's width/height is calculated too. No typing of sizes needed.</div>
+  <details><summary>Advanced: type dimensions manually (only if you cannot use a marker)</summary><div class="row"><input id="ww" type="number" placeholder="width cm" style="width:100px"><input id="wh" type="number" placeholder="height cm" style="width:100px"></div></details>
+  <div id="calOut"></div></div>
+ <div class="card"><h2>References</h2>
+  <div class="row"><select id="cat"><option value="dry">Dry wall baseline</option><option value="earlier">Earlier scan (same wall)</option><option value="known_damp">Known damp reference</option><option value="known_leak_surface">Known leak-related surface</option><option value="other_wall">Other wall reference</option></select>
+  <input id="rnote" placeholder="note" size="16"><button id="bRef" class="p">Capture reference</button></div>
+  <div id="refs" class="mu">none yet</div>
+  <details><summary>Thermal data (optional)</summary><div class="row"><input type="file" id="thf" accept=".csv,.json,.txt"><input id="thdev" placeholder="device name" size="12"><button id="bTh">Upload °C map</button></div><div class="mu">CSV rows of temperatures in °C. Assumed to cover the calibrated wall unless corners are supplied via API. Thermal anomalies are not proof of leakage.</div><div id="thOut"></div></details>
+  <details><summary>Pipe / asset layout (optional, cm on wall)</summary><textarea id="lay" rows="4" style="width:100%" placeholder='{"pipes":[{"name":"cold","points":[[40,0],[40,80]]}],"assets":[{"name":"socket","x":150,"y":100,"type":"socket"}]}'></textarea><button id="bLay">Save layout</button></details></div>
+</div><div>
+ <div class="card"><h2>Scan</h2><div class="row"><button id="bScan" class="p" disabled>Start scanning</button><button id="bSnap" disabled>Save snapshot</button><button id="bRep" disabled>Open report</button><span id="perf" class="mu"></span></div>
+  <div id="banner" class="banner b-quality">Not scanning</div><div id="res"></div></div>
+ <div class="card"><h2>Processing</h2><div class="mu">Original frame = live preview. Reference · now · evidence score · result:</div><img id="im1" class="pv" alt=""><div class="row"><div style="flex:1"><div class="mu">Processed wall map</div><img id="im2" class="pv" alt=""></div><div style="flex:1"><div class="mu">Evidence heat-map</div><img id="im3" class="pv" alt=""></div></div></div>
+ <div class="card"><h2>History</h2><div id="hist" class="mu">-</div></div>
+</div></main>
+<script>
+const $=id=>document.getElementById(id),esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const TOKEN=new URLSearchParams(location.search).get('token')||'';
+const S={hasScale:false,sid:null,stream:null,corners:[[.15,.15],[.85,.15],[.85,.85],[.15,.85]],drag:-1,cal:false,hasRef:false,scanning:false,paused:false,busy:false,mode:'idle',tap:[],regs:[],n:0,lat:[],times:[]};
+async function api(path,o={}){o.headers=Object.assign({},o.headers||{});if(TOKEN)o.headers['X-EchoVein-Token']=TOKEN;const r=await fetch(path,o);let j={};try{j=await r.json()}catch(e){}if(!r.ok){const e=new Error(j.error||('HTTP '+r.status));e.status=r.status;throw e}return j}
+const jpost=(p,b)=>api(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
+function steps(){$('s1').className='step'+(S.stream?' done':'');$('s2').className='step'+(S.cal?' done':'');$('s3').className='step'+(S.hasRef?' done':'');$('s4').className='step'+(S.scanning?' done':'');
+ $('bScan').disabled=!S.stream;$('bSnap').disabled=!S.sid||S.n==0;$('bRep').disabled=!S.sid||S.n==0;$('bPause').disabled=!S.stream;$('bStop').disabled=!S.stream}
+// ---------------- camera
+function camErr(e){const n=e&&e.name;return n==='NotAllowedError'?'Camera permission denied. Allow camera access in the browser site settings.':n==='NotFoundError'?'No camera found on this device.':n==='NotReadableError'?'Camera is in use by another app.':(n==='NotSupportedError'||n==='SecurityError'||n==='AbortError')?'Camera blocked or unavailable: allow camera permission for this site and use HTTPS or localhost.':n==='OverconstrainedError'?'This camera does not support the selected resolution/facing - choose another.':(!window.isSecureContext?'Camera needs HTTPS or localhost (see SCANNER.md for phone setup).':'Camera error: '+(e&&e.message||e))}
+async function startCam(){$('camMsg').textContent='';if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){$('camMsg').textContent=camErr({});return}
+ stopCam(true);const [w,h]=$('resSel').value.split('x').map(Number),d=$('dev').value;
+ const vc={width:{ideal:w},height:{ideal:h}};if(d)vc.deviceId={exact:d};else vc.facingMode={ideal:$('facing').value};
+ try{S.stream=await navigator.mediaDevices.getUserMedia({video:vc,audio:false});const v=$('v');v.srcObject=S.stream;await v.play();
+  const devs=(await navigator.mediaDevices.enumerateDevices()).filter(x=>x.kind==='videoinput'),cur=$('dev').value;$('dev').innerHTML='<option value="">Any camera</option>'+devs.map((x,i)=>`<option value="${esc(x.deviceId)}">${esc(x.label||'camera '+(i+1))}</option>`).join('');$('dev').value=cur;
+  $('status').textContent=`camera on ${v.videoWidth}x${v.videoHeight}`;S.cal=false;S.sid=null;S.hasRef=false;resize();draw()}catch(e){$('camMsg').textContent=camErr(e);S.stream=null}steps()}
+function stopCam(keep){S.scanning=false;$('bScan').textContent='Start scanning';if(S.stream){S.stream.getTracks().forEach(t=>t.stop());S.stream=null}$('v').srcObject=null;if(!keep){$('status').textContent='camera off';draw()}steps()}
+$('bStart').onclick=startCam;$('bStop').onclick=()=>stopCam();$('dev').onchange=()=>{if(S.stream)startCam()};
+$('bPause').onclick=()=>{const v=$('v');S.paused=!S.paused;if(S.paused){v.pause();$('bPause').textContent='Resume'}else{v.play();$('bPause').textContent='Pause'}};
+addEventListener('pagehide',()=>stopCam());
+function camType(){const m=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);if(!m)return 'laptop-webcam';return 'phone-'+($('facing').value==='user'?'front':'rear')}
+// ---------------- overlay
+const ov=$('ov'),cx=ov.getContext('2d');
+function resize(){const v=$('v');ov.width=v.videoWidth||640;ov.height=v.videoHeight||480}
+$('v').addEventListener('loadedmetadata',()=>{resize();draw()});
+const COL={WATCH:'#f5c542',SUSPECTED:'#f0883e',ESCALATED:'#ff3b30',VERIFIED:'#bc8cff'};
+function draw(){const W=ov.width,H=ov.height;cx.clearRect(0,0,W,H);if(!S.stream)return;
+ const q=S.corners.map(p=>[p[0]*W,p[1]*H]);cx.lineWidth=Math.max(2,W/320);cx.strokeStyle=S.cal?'#2ea043':'#38bdf8';cx.beginPath();q.forEach((p,i)=>i?cx.lineTo(p[0],p[1]):cx.moveTo(p[0],p[1]));cx.closePath();cx.stroke();
+ if(!S.cal||S.mode==='calibrating'){q.forEach((p,i)=>{cx.fillStyle='#38bdf8';cx.beginPath();cx.arc(p[0],p[1],Math.max(8,W/60),0,7);cx.fill();cx.fillStyle='#000';cx.font=Math.max(12,W/45)+'px sans-serif';cx.fillText(['1','2','3','4'][i],p[0]-4,p[1]+5)})}
+ S.regs.forEach(r=>{cx.strokeStyle=COL[r.state]||'#fff';cx.lineWidth=Math.max(2,W/260);(r.polygons||[]).forEach(poly=>{cx.beginPath();poly.forEach((p,i)=>i?cx.lineTo(p[0]*W,p[1]*H):cx.moveTo(p[0]*W,p[1]*H));cx.closePath();cx.stroke()});
+  if(r.pixel_xy){const x=r.pixel_xy[0]/r.frame_size[0]*W,y=r.pixel_xy[1]/r.frame_size[1]*H;cx.fillStyle=cx.strokeStyle;cx.font=Math.max(12,W/45)+'px sans-serif';cx.fillText(`#${r.id} ${r.left_cm!=null?r.left_cm.toFixed(0)+'/'+r.top_cm.toFixed(0)+'cm':''}`,x+6,y)}});
+ S.tap.forEach(p=>{cx.fillStyle='#f0f';cx.beginPath();cx.arc(p[0]*W,p[1]*H,8,0,7);cx.fill()})}
+function pos(e){const b=ov.getBoundingClientRect();return[(e.clientX-b.left)/b.width,(e.clientY-b.top)/b.height]}
+ov.onpointerdown=e=>{const p=pos(e);if(S.mode==='scale'){S.tap.push(p);draw();if(S.tap.length==2)doScale();return}
+ let best=-1,bd=.06;S.corners.forEach((c,i)=>{const d=Math.hypot(c[0]-p[0],c[1]-p[1]);if(d<bd){bd=d;best=i}});if(best>=0){S.drag=best;S.mode='calibrating';ov.setPointerCapture(e.pointerId)}};
+ov.onpointermove=e=>{if(S.drag>=0){const p=pos(e);S.corners[S.drag]=[Math.min(1,Math.max(0,p[0])),Math.min(1,Math.max(0,p[1]))];draw()}};
+ov.onpointerup=()=>{S.drag=-1};
+$('bNew').onclick=()=>{S.scanning=false;$('bScan').textContent='Start scanning';S.sid=null;S.cal=false;S.hasScale=false;S.hasRef=false;S.n=0;S.regs=[];S.mode='idle';['wid','amb','hum','light'].forEach(i=>$(i).disabled=false);$('calOut').innerHTML='';$('refs').textContent='none yet';$('res').innerHTML='';$('banner').className='banner b-quality';$('banner').textContent='Not scanning';draw();steps()};
+// ---------------- capture
+function grab(){const v=$('v'),pw=+$('pw').value,sc=Math.min(1,pw/v.videoWidth),c=document.createElement('canvas');c.width=Math.round(v.videoWidth*sc);c.height=Math.round(v.videoHeight*sc);c.getContext('2d').drawImage(v,0,0,c.width,c.height);return new Promise(r=>c.toBlob(r,'image/jpeg',.85))}
+async function ensureSession(){if(S.sid)return S.sid;const num=id=>$(id).value===''?undefined:+$(id).value;
+ const r=await jpost('/api/sessions',{wall_id:$('wid').value.trim(),camera_type:camType(),ambient_c:num('amb'),humidity:num('hum'),lighting:$('light').value||undefined});S.sid=r.session_id;S.n=0;['wid','amb','hum','light'].forEach(i=>$(i).disabled=true);refreshSession();return S.sid}
+function grabHi(){const v=$('v'),sc=Math.min(1,1600/v.videoWidth),c=document.createElement('canvas');c.width=Math.round(v.videoWidth*sc);c.height=Math.round(v.videoHeight*sc);c.getContext('2d').drawImage(v,0,0,c.width,c.height);return new Promise(r=>c.toBlob(r,'image/jpeg',.92))}
+function showCal(cal,pre){const q=cal.quality,rel=cal.units==='relative',unc=cal.dims_uncertainty_cm;
+ return `${pre||''}<div><b>Wall size ${rel?'(relative only)':'measured automatically'}: ${cal.wall_w_cm.toFixed(0)} × ${cal.wall_h_cm.toFixed(0)} ${rel?'% of wall height':'cm'}</b>${unc?` (±${unc[0].toFixed(0)} / ±${unc[1].toFixed(0)} cm)`:''}</div>Calibration <b>${esc(q.level)}</b> (${q.score.toFixed(2)})`+(q.warnings.length?'<ul class="warn">'+q.warnings.map(w=>'<li>'+esc(w)+'</li>').join('')+'</ul>':'')}
+$('bAuto').onclick=async()=>{try{if(!S.stream)throw new Error('start the camera first');await ensureSession();$('calOut').innerHTML='<span class="mu">Looking for the marker and the wall…</span>';
+ const b=await grabHi(),mk=+$('mk').value||15,r=await api(`/api/sessions/${S.sid}/auto_calibrate?marker_cm=${mk}&apply=1&select_area=${$('selArea').checked?1:0}`,{method:'POST',body:b});
+ S.hasScale=r.scale_found;if(r.corners_norm)S.corners=r.corners_norm;let h='';
+ if(r.status==='calibrated'){S.cal=true;S.mode='idle';h=showCal(r.calibration,'<div style="color:var(--ok)">✔ Marker and wall found.</div>')}
+ else if(r.status==='proposal'){S.mode='calibrating';h=`<div>Measured ${r.width_cm.toFixed(0)} × ${r.height_cm.toFixed(0)} cm - check the corners, then press “Measure &amp; calibrate”.</div>`}
+ else{S.mode='calibrating';h='<div class="warn">'+esc(r.message)+'</div>'}
+ if(r.warnings&&r.warnings.length&&r.status!=='calibrated')h+='<ul class="warn">'+r.warnings.map(w=>'<li>'+esc(w)+'</li>').join('')+'</ul>';
+ $('calOut').innerHTML=h;draw();steps();refreshSession()}catch(e){$('calOut').innerHTML='<span class="err">'+esc(e.message)+'</span>'}};
+$('bCal').onclick=async()=>{try{if(!S.stream)throw new Error('start the camera first');await ensureSession();const v=$('v'),body={corners_norm:S.corners,frame_w:v.videoWidth,frame_h:v.videoHeight},mw=$('ww').value,mh=$('wh').value;
+ if(mw&&mh){body.wall_w_cm=+mw;body.wall_h_cm=+mh}else if(S.hasScale)body.auto=true;else if(!confirm('No scale marker was found. Continue in RELATIVE units (% of wall height, no centimetres)?'))return;
+ const r=await jpost(`/api/sessions/${S.sid}/calibrate`,body);S.cal=true;S.mode='idle';$('calOut').innerHTML=showCal(r.calibration);draw();steps();refreshSession()}catch(e){$('calOut').innerHTML='<span class="err">'+esc(e.message)+'</span>'}};
+$('bScale').onclick=()=>{if(!S.cal){$('calOut').innerHTML='<span class="warn">Calibrate first.</span>';return}S.mode='scale';S.tap=[];$('hint').textContent='Tap two points on the wall a known distance apart (e.g. ends of a ruler or door frame).'};
+async function doScale(){const len=+prompt('Real distance between the two points (cm)?','100');S.mode='idle';const t=S.tap;S.tap=[];draw();if(!len)return;try{const r=await jpost(`/api/sessions/${S.sid}/scale_check`,{p1_norm:t[0],p2_norm:t[1],length_cm:len});
+ $('calOut').innerHTML+=`<div>Scale check: measured ${r.measured_cm.toFixed(1)} cm vs ${len} cm → <b class="${Math.abs(r.error_pct)>5?'err':''}">${r.error_pct>0?'+':''}${r.error_pct.toFixed(1)}%</b>${Math.abs(r.error_pct)>5?' - recalibrate':''}</div>`}catch(e){$('calOut').innerHTML+='<div class="err">'+esc(e.message)+'</div>'}}
+$('bRef').onclick=async()=>{try{if(!S.cal)throw new Error('calibrate the wall first');const b=await grab(),r=await api(`/api/sessions/${S.sid}/reference?category=${$('cat').value}&notes=${encodeURIComponent($('rnote').value)}`,{method:'POST',body:b});
+ if(['dry','earlier'].includes($('cat').value))S.hasRef=true;$('refs').innerHTML='<span class="mu">saved ('+esc(r.category)+', quality '+r.quality.score.toFixed(2)+')</span>';steps();refreshSession()}catch(e){$('refs').innerHTML='<span class="err">'+esc(e.message)+'</span>'}};
+$('bTh').onclick=async()=>{try{const f=$('thf').files[0];if(!f)throw new Error('choose a file');const t=await f.text();let a;try{a=JSON.parse(t)}catch(e){a=t.trim().split(/\r?\n/).map(l=>l.split(/[,;\s]+/).filter(Boolean).map(Number))}
+ const r=await jpost(`/api/sessions/${S.sid}/thermal`,{temps:a.temps||a,units:'C',device:$('thdev').value});$('thOut').innerHTML=`<span class="mu">loaded ${r.min.toFixed(1)}–${r.max.toFixed(1)} °C; ${esc(r.registration)}</span>`}catch(e){$('thOut').innerHTML='<span class="err">'+esc(e.message)+'</span>'}};
+$('bLay').onclick=async()=>{try{await jpost(`/api/sessions/${S.sid}/layout`,JSON.parse($('lay').value||'{}'));$('lay').style.borderColor='#2ea043'}catch(e){alert('Layout error: '+e.message)}};
+// ---------------- scanning
+$('bScan').onclick=async()=>{if(S.scanning){S.scanning=false;$('bScan').textContent='Start scanning';steps();return}
+ try{await ensureSession()}catch(e){$('res').innerHTML='<span class="err">'+esc(e.message)+'</span>';return}S.scanning=true;$('bScan').textContent='Stop scanning';steps();loop()};
+async function loop(){let wait=1000;if(S.scanning&&!S.paused&&!S.busy){S.busy=true;try{const b=await grab(),t0=performance.now();S.n++;
+  const r=await api(`/api/sessions/${S.sid}/frame?images=${S.n%3==1?1:0}`,{method:'POST',body:b});const dt=performance.now()-t0;S.lat.push(dt);if(S.lat.length>20)S.lat.shift();S.times.push(Date.now());if(S.times.length>10)S.times.shift();
+  S.regs=r.regions||[];render(r);draw();wait=Math.max(150,r.next_interval_ms||1000);steps()}
+  catch(e){if(e.status===429)wait=1500;else if(e.status===409){$('res').innerHTML='<div class="err">'+esc(e.message)+'</div>';wait=3000}else{$('res').innerHTML='<div class="err">'+esc(e.message)+' (retrying)</div>';wait=3000}}finally{S.busy=false}}
+ if(S.scanning)setTimeout(loop,wait)}
+function bar(v){return `<div class="bar"><i style="width:${Math.round(Math.max(0,Math.min(1,v))*100)}%"></i></div>`}
+function render(r){$('banner').className='banner b-'+r.category;$('banner').textContent=r.category_text+' · '+r.mode;const I=r.indicators,q=r.quality,U=r.units==='relative'?'%':'cm';let h='';
+ h+=`<div class="mu">Wall ${esc(r.wall_id)} · scan ${esc(r.scan_id)} · ${new Date(r.timestamp*1000).toLocaleTimeString()}${r.wall?` · wall ${r.wall.width_cm.toFixed(0)}×${r.wall.height_cm.toFixed(0)} ${r.units==='relative'?'(relative units)':'cm ('+r.wall.dims_method+')'}`:''} · ${esc(r.reference_status)}</div>`;
+ h+='<h2 style="margin-top:10px">Reliability indicators (separate)</h2><table>';
+ h+=`<tr><td>Image quality</td><td>${bar(I.image_quality.score)}</td><td>${I.image_quality.score.toFixed(2)}</td></tr>`;
+ h+=`<tr><td>Calibration</td><td>${I.calibration_quality.score!=null?bar(I.calibration_quality.score):''}</td><td>${esc(I.calibration_quality.level||'none')}</td></tr>`;
+ if(I.reference_reliability.score!=null)h+=`<tr><td>Reference match</td><td>${bar(I.reference_reliability.score)}</td><td>${I.reference_reliability.score.toFixed(2)}</td></tr>`;
+ if(I.dip_detection_strength.value!=null)h+=`<tr><td>DIP evidence strength</td><td>${bar(I.dip_detection_strength.value)}</td><td>${I.dip_detection_strength.value.toFixed(2)}</td></tr>`;
+ h+=`<tr><td>AI score</td><td colspan=2 class="mu">${I.ai_prediction.value!=null?I.ai_prediction.value.toFixed(2)+' (uncalibrated, simulated-data model)':'not available'}</td></tr>`;
+ h+=`<tr><td>Thermal</td><td colspan=2 class="mu">${I.thermal_anomaly.available?'loaded':'not available'}</td></tr></table>`;
+ const ec=I.evidence_completeness;h+='<div class="mu">Evidence: '+Object.keys(ec).map(k=>(ec[k]?'✔ ':'✘ ')+k.replace(/_/g,' ')).join(' · ')+'</div>';
+ if(r.regions.length){h+='<h2 style="margin-top:10px">Regions (surface change locations)</h2><table><tr><th>#</th><th>state</th><th>L</th><th>R</th><th>T</th><th>B</th><th>W×H</th><th>'+U+'²</th><th></th></tr>';
+  r.regions.forEach(g=>{h+=g.x_cm!=null?`<tr><td>${g.id}</td><td>${esc(g.state)}<div class="mu">${esc(g.label)}</div></td><td>${g.left_cm.toFixed(0)}</td><td>${g.right_cm.toFixed(0)}</td><td>${g.top_cm.toFixed(0)}</td><td>${g.bottom_cm.toFixed(0)}</td><td>${g.width_cm.toFixed(0)}×${g.height_cm.toFixed(0)}</td><td>${g.area_cm2.toFixed(0)}<div class="mu">±${g.uncertainty_cm.toFixed(1)}</div></td><td><button onclick="fb(${g.id},'verified')">✔</button><button onclick="fb(${g.id},'dismissed')">✖</button></td></tr>`:`<tr><td>${g.id}</td><td colspan=8>${esc(g.label)} (low reliability, no coordinates)</td></tr>`;
+   if(g.recurring_previous_sessions)h+=`<tr><td colspan=9 class="warn">Recurring: seen here in ${g.recurring_previous_sessions} earlier session(s)</td></tr>`;
+   if(g.source_zone)h+=`<tr><td colspan=9 class="mu">probable source zone ≈ (${g.source_zone.x_cm.toFixed(0)}, ${g.source_zone.y_cm.toFixed(0)}) ± ${g.source_zone.sx_cm.toFixed(0)} cm - an estimate, not a confirmed break point</td></tr>`;
+   if(g.forecast)h+=`<tr><td colspan=9 class="mu">if trend continues: ${g.forecast.points.map(p=>`+${(p.horizon_h*60).toFixed(0)}min ≈ ${p.area_cm2.toFixed(0)} ${U}²`).join(', ')}</td></tr>`;
+   if(g.thermal)h+=`<tr><td colspan=9 class="mu">thermal ${g.thermal.mean.toFixed(1)} ${g.thermal.units} (Δ ${g.thermal.delta_vs_wall_median.toFixed(1)} vs wall)</td></tr>`});h+='</table><div class="mu">Distances in '+U+' from the wall/area edges (L/R/T/B). Surface change ≠ confirmed leak source.</div>'}
+ if(r.warnings.length)h+='<ul class="warn">'+r.warnings.map(w=>'<li>'+esc(w)+'</li>').join('')+'</ul>';
+ h+=`<div class="mu">Wall health score ${r.wall_health.score.toFixed(0)}/100 (heuristic: ${r.wall_health.breakdown.map(b=>esc(b.factor)+' -'+b.penalty).join(', ')})</div>`;
+ const fps=S.times.length>1?((S.times.length-1)/((S.times[S.times.length-1]-S.times[0])/1000)):0;$('perf').textContent=`latency ${r.perf.latency_ms.toFixed(0)} ms (server) / ${(S.lat.reduce((a,b)=>a+b,0)/S.lat.length).toFixed(0)} ms (round trip) · ${fps.toFixed(1)} analyses/s measured`;
+ h+='<details><summary>Limitations</summary><ul class="mu">'+r.limitations.map(w=>'<li>'+esc(w)+'</li>').join('')+'</ul></details>';$('res').innerHTML=h;
+ if(r.images){if(r.images.reference_vs_now)$('im1').src=r.images.reference_vs_now;if(r.images.processed)$('im2').src=r.images.processed;if(r.images.mask)$('im3').src=r.images.mask}}
+window.fb=async(id,v)=>{try{await jpost(`/api/sessions/${S.sid}/feedback`,{track:id,verdict:v})}catch(e){alert(e.message)}};
+$('bSnap').onclick=async()=>{try{await api(`/api/sessions/${S.sid}/snapshot`,{method:'POST'});$('perf').textContent='snapshot saved';refreshSession()}catch(e){alert(e.message)}};
+$('bRep').onclick=()=>{window.open(`/api/sessions/${S.sid}/report`+(TOKEN?`?token=${encodeURIComponent(TOKEN)}`:''),'_blank')};
+async function refreshSession(){try{if(S.sid){const d=await api(`/api/sessions/${S.sid}`);$('refs').innerHTML=d.references.length?'<table>'+d.references.map(r=>`<tr><td>${esc(r.category)}</td><td>${new Date(r.created*1000).toLocaleTimeString()}</td><td class="mu">${esc(r.meta.notes||'')}</td></tr>`).join('')+'</table>':'none yet'}
+ const h=await api('/api/sessions');$('hist').innerHTML=h.sessions.slice(0,8).map(s=>`<div class="row"><span>${esc(s.wall_id)} · ${new Date(s.created*1000).toLocaleString()} · ${esc(s.camera_type)}</span><button onclick="del('${s.id}')">Delete</button></div>`).join('')||'-'}catch(e){}}
+window.del=async id=>{if(!confirm('Delete this scan session and all its images?'))return;await api('/api/sessions/'+id,{method:'DELETE'});if(id===S.sid){S.sid=null;S.cal=false;S.hasScale=false;S.hasRef=false;S.n=0;S.regs=[];draw()}refreshSession();steps()};
+refreshSession();steps();
+</script></body></html>
