@@ -471,68 +471,319 @@ class ScanService:
         return out[:8]
 
     def _regions(self, sid, rt, m, snap, s):
-        cal = rt.cal; ppc = cal.px_per_cm; pw, ph = rt.proc; out = []
-        cq = (s["calib"] or {}).get("quality", {}); cerr = cq.get("corner_err_px", 3.0)
+        cal = rt.cal
+        ppc = cal.px_per_cm
+        pw, ph = rt.proc
+        out = []
+
+        cq = (s["calib"] or {}).get("quality", {})
+        cerr = cq.get("corner_err_px", 3.0)
+
         tm = rt.thermal["map"] if rt.thermal else None
         cm = rt.thermal["analysis"]["_cold_mask"] if rt.thermal else None
+
         for tr in m.tracker.tracks:
             if not tr.active or not tr.last()["present"] or tr.mask is None:
                 continue
-            d = next((x for x in snap["tracks"] if x["id"] == tr.id), None)
+
+            d = next(
+                (x for x in snap["tracks"] if x["id"] == tr.id),
+                None
+            )
             if d is None:
                 continue
+
             bx, by, bw, bh = cv2.boundingRect(tr.mask)
-            cnts, _ = cv2.findContours(tr.mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+            cnts, _ = cv2.findContours(
+                tr.mask,
+                cv2.RETR_EXTERNAL,
+                cv2.CHAIN_APPROX_SIMPLE
+            )
+
             polys = []
+
             for c in cnts:
                 c = cv2.approxPolyDP(c, 2.0, True).reshape(-1, 2)
+
                 if len(c) >= 3:
-                    p = cal.map_to_image(c, m._T); polys.append((p / [pw, ph]).clip(0, 1).tolist())
+                    p = cal.map_to_image(c, m._T)
+                    polys.append(
+                        (p / [pw, ph]).clip(0, 1).tolist()
+                    )
+
             cx, cy = d["x_cm"], d["y_cm"]
-            cam = cal.map_to_image([[cx * ppc, cy * ppc]], m._T)[0]
-            span_s = (tr.hist[-1]["t"] - tr.hist[0]["t"]) * 3600.0
+
+            cam = cal.map_to_image(
+                [[cx * ppc, cy * ppc]],
+                m._T
+            )[0]
+
+            span_s = (
+                (tr.hist[-1]["t"] - tr.hist[0]["t"]) * 3600.0
+                if len(tr.hist) >= 2 else 0.0
+            )
+
             long_obs = span_s >= 600
             n_obs = len(tr.present_hist)
-            recur = self.store.recurring_count(s["wall_id"], cx, cy, 15.0, sid) if tr.state in ("SUSPECTED", "ESCALATED") else 0
-            reg = {"id": tr.id, "state": d["state"], "label": tr.label if long_obs else "unclassified (needs longer observation)",
-                   "reason": d["reason"], "observations": n_obs, "observed_seconds": span_s,
-                   "pixel_xy": [float(cam[0]), float(cam[1])], "frame_size": [pw, ph],
-                   "x_cm": cx, "y_cm": cy, "left_cm": d["left_cm"], "right_cm": d["right_cm"], "top_cm": d["top_cm"], "bottom_cm": d["bottom_cm"],
-                   "width_cm": bw / ppc, "height_cm": bh / ppc, "area_cm2": d["area_cm2"],
-                   "uncertainty_cm": float(np.hypot(cm_per_cam_px(cal, cx * ppc, cy * ppc, m._T) * max(cerr, 1.0) + 0.5 / ppc,
-                                                    max(min(d["left_cm"], d["right_cm"]), min(d["top_cm"], d["bottom_cm"])) * cq.get("rel_scale_err", 0.0))),
-                   "units": (s["calib"] or {}).get("units", "cm"),
-                   "polygons": polys, "localization_level": "surface change region (not a confirmed leak source)",
-                   "severity_relative": d["severity"] if long_obs else None,
-                   "growth_cm_per_h": d["growth_cm_h"] if long_obs else None,
-                   "source_zone": d["source"] if long_obs else None,
-                   "pipes": d["pipes"][:2] if long_obs else [], "assets": d["assets"],
-                   "forecast": forecast_growth(tr), "recurring_previous_sessions": recur,
-                   "ai_score": {"value": float(tr.last()["score"]), "meaning": "mean pixel-classifier/fusion score in region; relative, uncalibrated"},
-                   "cues": {"darkening": tr.last()["dark"], "texture_loss": tr.last()["tex"], "saturation_change": tr.last()["sat"]}}
+
+            recur = (
+                self.store.recurring_count(
+                    s["wall_id"], cx, cy, 15.0, sid
+                )
+                if tr.state in ("SUSPECTED", "ESCALATED")
+                else 0
+            )
+
+            # -------------------------------------------------
+            # EV-036: Evidence quality score
+            # This is NOT a leak probability.
+            # -------------------------------------------------
+
+            observation_score = min(1.0, n_obs / 10.0) * 30.0
+
+            calibration_score = (
+                float(np.clip(cq.get("score", 0.0), 0.0, 1.0))
+                * 25.0
+            )
+
+            detection_score = (
+                float(np.clip(tr.last().get("score", 0.0), 0.0, 1.0))
+                * 25.0
+            )
+
+            reference_score = 20.0 if snap.get("baseline") else 0.0
+
+            evidence_score = (
+                observation_score
+                + calibration_score
+                + detection_score
+                + reference_score
+            )
+
+            evidence_score = round(
+                float(np.clip(evidence_score, 0.0, 100.0)),
+                1
+            )
+
+            if evidence_score >= 75:
+                evidence_level = "strong"
+            elif evidence_score >= 50:
+                evidence_level = "moderate"
+            else:
+                evidence_level = "limited"
+
+            reg = {
+                "id": tr.id,
+                "state": d["state"],
+                "label": (
+                    tr.label
+                    if long_obs
+                    else "unclassified (needs longer observation)"
+                ),
+                "reason": d["reason"],
+                "observations": n_obs,
+                "observed_seconds": span_s,
+
+                "pixel_xy": [
+                    float(cam[0]),
+                    float(cam[1])
+                ],
+                "frame_size": [pw, ph],
+
+                "x_cm": cx,
+                "y_cm": cy,
+                "left_cm": d["left_cm"],
+                "right_cm": d["right_cm"],
+                "top_cm": d["top_cm"],
+                "bottom_cm": d["bottom_cm"],
+
+                "width_cm": bw / ppc,
+                "height_cm": bh / ppc,
+                "area_cm2": d["area_cm2"],
+
+                "uncertainty_cm": float(
+                    np.hypot(
+                        cm_per_cam_px(
+                            cal,
+                            cx * ppc,
+                            cy * ppc,
+                            m._T
+                        ) * max(cerr, 1.0) + 0.5 / ppc,
+
+                        max(
+                            min(d["left_cm"], d["right_cm"]),
+                            min(d["top_cm"], d["bottom_cm"])
+                        ) * cq.get("rel_scale_err", 0.0)
+                    )
+                ),
+
+                "units": (s["calib"] or {}).get("units", "cm"),
+
+                "polygons": polys,
+
+                "localization_level":
+                    "surface change region (not a confirmed leak source)",
+
+                "severity_relative":
+                    d["severity"] if long_obs else None,
+
+                "growth_cm_per_h":
+                    d["growth_cm_h"] if long_obs else None,
+
+                "source_zone":
+                    d["source"] if long_obs else None,
+
+                "pipes":
+                    d["pipes"][:2] if long_obs else [],
+
+                "assets": d["assets"],
+
+                "forecast": forecast_growth(tr),
+
+                "recurring_previous_sessions": recur,
+
+                "ai_score": {
+                    "value": float(tr.last()["score"]),
+                    "meaning":
+                        "mean pixel-classifier/fusion score in region; relative, uncalibrated"
+                },
+
+                "cues": {
+                    "darkening": tr.last()["dark"],
+                    "texture_loss": tr.last()["tex"],
+                    "saturation_change": tr.last()["sat"]
+                },
+
+                # EV-036: Evidence quality details
+                "evidence_quality": {
+                    "score": evidence_score,
+                    "level": evidence_level,
+                    "components": {
+                        "observation": round(observation_score, 1),
+                        "calibration": round(calibration_score, 1),
+                        "detection": round(detection_score, 1),
+                        "dry_reference": round(reference_score, 1)
+                    },
+                    "meaning":
+                        "Heuristic evidence completeness/quality score; not a leak probability or diagnosis."
+                }
+            }
+
+            # -------------------------------------------------
+            # Thermal evidence
+            # -------------------------------------------------
+
             if tm is not None:
                 sel = tr.mask > 0
                 vals = tm[sel]
+
                 if vals.size:
-                    reg["thermal"] = {"mean": float(vals.mean()), "min": float(vals.min()), "max": float(vals.max()), "units": rt.thermal["units"],
-                                      "delta_vs_wall_median": float(vals.mean() - np.median(tm)),
-                                      "cold_overlap": float(cm[sel].mean()) if cm is not None else 0.0,
-                                      "cold_anomaly": bool(cm is not None and cm[sel].mean() > 0.25),
-                                      "note": "thermal anomaly is not proof of leakage (ambient, insulation, airflow, sun)"}
-            if tr.state in ("SUSPECTED", "ESCALATED") and (tr.id, tr.state) not in rt.logged_events:
-                rt.logged_events.add((tr.id, tr.state)); self.store.add_event(sid, s["wall_id"], cx, cy, tr.state, tr.label)
+                    cold_overlap = (
+                        float(cm[sel].mean())
+                        if cm is not None
+                        else 0.0
+                    )
+
+                    reg["thermal"] = {
+                        "mean": float(vals.mean()),
+                        "min": float(vals.min()),
+                        "max": float(vals.max()),
+                        "units": rt.thermal["units"],
+
+                        "delta_vs_wall_median": float(
+                            vals.mean() - np.median(tm)
+                        ),
+
+                        "cold_overlap": cold_overlap,
+
+                        "cold_anomaly": bool(
+                            cm is not None and cold_overlap > 0.25
+                        ),
+
+                        "note":
+                            "Thermal anomaly is not proof of leakage (ambient, insulation, airflow, sun)."
+                    }
+
+            # -------------------------------------------------
+            # Event logging
+            # -------------------------------------------------
+
+            if (
+                tr.state in ("SUSPECTED", "ESCALATED")
+                and (tr.id, tr.state) not in rt.logged_events
+            ):
+                rt.logged_events.add((tr.id, tr.state))
+
+                self.store.add_event(
+                    sid,
+                    s["wall_id"],
+                    cx,
+                    cy,
+                    tr.state,
+                    tr.label
+                )
+
             out.append(reg)
+
         return out
 
+  class ScanService:
+
+    def process_frame(self, ...):
+        # Existing code
+        pass
+
     def _category(self, res, snap):
-        regs = res["regions"]
+        """
+        Classify observed surface changes.
+        This does not confirm an active water leak.
+        """
+
+        regs = res.get("regions", [])
+
         if not regs:
             return "none"
-        if not any(r["state"] in ("SUSPECTED", "ESCALATED", "VERIFIED") for r in regs):
+
+        significant = any(
+            r.get("state") in ("SUSPECTED", "ESCALATED", "VERIFIED")
+            for r in regs
+        )
+
+        if not significant:
             return "change"
-        strong = any(r.get("thermal", {}).get("cold_anomaly", False) or r["observations"] >= 10 or (r["severity_relative"] or 0) > 40 or r["recurring_previous_sessions"] > 0 or
-                     any(a["electrical"] and a["status"] in ("reached", "approaching") for a in r["assets"]) for r in regs
-                     if r["state"] in ("SUSPECTED", "ESCALATED"))
+
+        strong = False
+
+        for r in regs:
+            if r.get("state") not in ("SUSPECTED", "ESCALATED"):
+                continue
+
+            thermal = r.get("thermal") or {}
+            thermal_evidence = thermal.get("cold_anomaly", False)
+
+            observations = r.get("observations", 0)
+            severity = r.get("severity_relative") or 0
+            recurring = r.get("recurring_previous_sessions", 0)
+
+            assets = r.get("assets", [])
+
+            electrical_evidence = any(
+                a.get("electrical", False)
+                and a.get("status") in ("reached", "approaching")
+                for a in assets
+            )
+
+            if (
+                thermal_evidence
+                or observations >= 10
+                or severity > 40
+                or recurring > 0
+                or electrical_evidence
+            ):
+                strong = True
+                break
+
         return "inspect" if strong else "potential"
 
     def _finish(self, sid, rt, res, t_start, m, want_images):
